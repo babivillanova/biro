@@ -142,7 +142,6 @@ function FragmentLibrary() {
 
       console.log('✅ Model loaded into scene:', fragment.name);
       setIsLoading(false);
-      updateUI();
     } catch (error) {
       console.error('Error loading fragment to scene:', error);
       alert('Error loading fragment: ' + error.message);
@@ -160,7 +159,6 @@ function FragmentLibrary() {
 
       console.log('✅ Model removed from scene');
       setIsLoading(false);
-      updateUI();
     } catch (error) {
       console.error('Error removing model:', error);
       alert('Error removing model: ' + error.message);
@@ -196,7 +194,6 @@ function FragmentLibrary() {
 
       console.log('✅ Fragment deleted from database');
       setIsLoading(false);
-      updateUI();
     } catch (error) {
       console.error('Error deleting fragment:', error);
       alert('Error deleting fragment: ' + error.message);
@@ -236,7 +233,6 @@ function FragmentLibrary() {
       setLoadedModels([]);
       console.log('✅ All models cleared from scene');
       setIsLoading(false);
-      updateUI();
     } catch (error) {
       console.error('Error clearing models:', error);
       alert('Error clearing models: ' + error.message);
@@ -257,15 +253,17 @@ function FragmentLibrary() {
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
   };
 
-  const updateUI = () => {
-    // Force re-render of UI components
+  // Create/update UI based on current state
+  useEffect(() => {
+    if (!componentsRef.current) return;
+
+    // Remove old panel if exists
     if (panelRef.current && panelRef.current.parentNode) {
       panelRef.current.parentNode.removeChild(panelRef.current);
+      panelRef.current = null;
     }
-    createUI();
-  };
 
-  const createUI = () => {
+    // Create new panel with current state
     const panel = BUI.Component.create(() => {
       const fragmentItems = savedFragments.map(fragment => {
         const isLoaded = loadedModels.find(m => m.id === fragment.id);
@@ -323,7 +321,7 @@ function FragmentLibrary() {
     document.body.append(panel);
     panelRef.current = panel;
 
-    // Create phone menu button
+    // Create phone menu button only once
     if (!buttonRef.current) {
       const button = BUI.Component.create(() => {
         const onClick = () => {
@@ -343,12 +341,6 @@ function FragmentLibrary() {
 
       document.body.append(button);
       buttonRef.current = button;
-    }
-  };
-
-  useEffect(() => {
-    if (componentsRef.current) {
-      createUI();
     }
   }, [savedFragments, loadedModels]);
 

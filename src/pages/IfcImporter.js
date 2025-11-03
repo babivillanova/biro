@@ -114,7 +114,6 @@ function IfcImporter() {
       
       console.log('✅ IFC conversion completed');
       setIsLoading(false);
-      updateUI();
     } catch (error) {
       console.error('Error converting IFC:', error);
       alert('Error converting IFC file: ' + error.message);
@@ -146,7 +145,6 @@ function IfcImporter() {
 
       console.log('✅ Model loaded into scene');
       setIsLoading(false);
-      updateUI();
     } catch (error) {
       console.error('Error loading model:', error);
       alert('Error loading model: ' + error.message);
@@ -166,7 +164,6 @@ function IfcImporter() {
 
       console.log('✅ Model removed from scene');
       setIsLoading(false);
-      updateUI();
     } catch (error) {
       console.error('Error removing model:', error);
       alert('Error removing model: ' + error.message);
@@ -227,15 +224,17 @@ function IfcImporter() {
     URL.revokeObjectURL(a.href);
   };
 
-  const updateUI = () => {
-    // Force re-render of UI components
+  // Create/update UI based on current state - moved outside useEffect to access current state
+  useEffect(() => {
+    if (!componentsRef.current) return;
+
+    // Remove old panel if exists
     if (panelRef.current && panelRef.current.parentNode) {
       panelRef.current.parentNode.removeChild(panelRef.current);
+      panelRef.current = null;
     }
-    createUI();
-  };
 
-  const createUI = () => {
+    // Create new panel with current state
     const panel = BUI.Component.create(() => {
       let content;
 
@@ -275,7 +274,6 @@ function IfcImporter() {
               setFragmentBytes(null);
               setModelName('');
               setCurrentModelId(null);
-              updateUI();
             }}
           ></bim-button>
         `;
@@ -293,7 +291,7 @@ function IfcImporter() {
     document.body.append(panel);
     panelRef.current = panel;
 
-    // Create phone menu button
+    // Create phone menu button only once
     if (!buttonRef.current) {
       const button = BUI.Component.create(() => {
         const onClick = () => {
@@ -314,13 +312,7 @@ function IfcImporter() {
       document.body.append(button);
       buttonRef.current = button;
     }
-  };
-
-  useEffect(() => {
-    if (componentsRef.current) {
-      createUI();
-    }
-  }, [fragmentBytes, currentModelId]);
+  }, [fragmentBytes, currentModelId, modelName]);
 
   return (
     <div className="IfcImporter">

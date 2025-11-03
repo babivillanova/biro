@@ -11,7 +11,7 @@ function App() {
       <div className="App">
         <nav className="app-nav">
           <Link to="/" className="nav-link">Home</Link>
-          <Link to="/edit" className="nav-link">Edit</Link>
+          <Link to="/edit" className="nav-link">Edit Example Model</Link>
           <Link to="/ifc-importer" className="nav-link">IFC Importer</Link>
           <Link to="/library" className="nav-link">Library</Link>
         </nav>
