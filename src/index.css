@@ -11,3 +11,58 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* BIM UI Component Base Styles */
+bim-panel {
+  display: block;
+  position: fixed;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+bim-panel-section {
+  display: block;
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+bim-panel-section:last-child {
+  border-bottom: none;
+}
+
+bim-button {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background: #6528D7;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+bim-button:hover {
+  background: #5420b8;
+}
+
+bim-dropdown,
+bim-color-input,
+bim-number-input,
+bim-label {
+  display: block;
+  margin: 0.5rem 0;
+}
+
+bim-option {
+  display: block;
+  padding: 0.5rem;
+  cursor: pointer;
+}
+
+bim-option:hover {
+  background: rgba(101, 40, 215, 0.1);
+}
