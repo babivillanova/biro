@@ -9,6 +9,9 @@ import * as FRAGS from "@thatopen/fragments";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { supabase } from '../supabaseClient';
 
+// Track initialization state across component remounts (for React.StrictMode)
+let isSceneInitialized = false;
+
 // GeneralEditor class for editing BIM elements
 class GeneralEditor {
   onUpdated = new OBC.Event();
@@ -450,8 +453,18 @@ function Edit() {
 
   useEffect(() => {
     if (!containerRef.current) return;
+    
+    // Prevent double initialization from React.StrictMode
+    if (isSceneInitialized) {
+      console.log('⚠️ Skipping initialization - already initialized');
+      return;
+    }
+    
+    // Set flag immediately to prevent concurrent initialization attempts
+    isSceneInitialized = true;
 
     const container = containerRef.current;
+    let isCleaning = false;
     let components;
     let world;
     let fragments;
@@ -479,9 +492,40 @@ function Edit() {
       }
     };
 
+    // Generate consistent color from user ID string
+    const getUserColor = (userId) => {
+      if (!userId || userId === 'unknown' || userId === 'Unknown') {
+        return '#888888'; // Gray for unknown users
+      }
+      
+      // Simple hash function
+      let hash = 0;
+      for (let i = 0; i < userId.length; i++) {
+        hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+        hash = hash & hash; // Convert to 32bit integer
+      }
+      
+      // Convert hash to HSL color (hue between 0-360)
+      const hue = Math.abs(hash % 360);
+      const saturation = 65 + (Math.abs(hash) % 20); // 65-85%
+      const lightness = 45 + (Math.abs(hash >> 8) % 15); // 45-60%
+      
+      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    };
+
     const initializeScene = async () => {
+      if (isCleaning) {
+        console.log('⚠️ Skipping initialization - cleaning in progress');
+        return;
+      }
+      
       try {
         console.log('🚀 Initializing BIM Editor with Supabase integration...');
+        
+        // Clear container first to remove any existing canvas
+        while (container.firstChild) {
+          container.removeChild(container.firstChild);
+        }
         
         // Get user IP for tracking
         await getUserIp();
@@ -642,6 +686,12 @@ function Edit() {
 
               const timestamp = new Date(dbRequest.created_at).toLocaleTimeString();
               const userIdentifier = dbRequest.user_id || 'Unknown';
+              const userColor = getUserColor(userIdentifier);
+              
+              // Shorten IP addresses for display (e.g., 192.168.1.1 -> ...68.1.1)
+              const displayUserId = userIdentifier.length > 12 ? 
+                '...' + userIdentifier.slice(-9) : 
+                userIdentifier;
 
               const requestMenu = BUI.Component.create(() => {
                 return BUI.html`
@@ -651,7 +701,9 @@ function Edit() {
                     <div>
                       <bim-label class="history-request-title">${requestTypeName}</bim-label>
                       <bim-label class="history-request-subtitle">ID: ${request.localId}</bim-label>
-                      <bim-label class="history-request-subtitle" style="font-size: 0.7rem; opacity: 0.6;">${timestamp} • ${userIdentifier}</bim-label>
+                      <bim-label class="history-request-subtitle" style="font-size: 0.7rem; opacity: 0.6;">
+                        ${timestamp} • <span class="user-badge" style="background-color: ${userColor};">${displayUserId}</span>
+                      </bim-label>
                     </div>
                   </div>
                 `;
@@ -928,6 +980,15 @@ function Edit() {
 
     // Cleanup function
     return () => {
+      // Skip cleanup if never initialized
+      if (!isSceneInitialized) {
+        console.log('⏭️ Skipping cleanup - was never initialized');
+        return;
+      }
+      
+      console.log('🧹 Cleaning up Edit component...');
+      isCleaning = true;
+      
       // Unsubscribe from real-time updates
       if (window.supabaseChannel) {
         supabase.removeChannel(window.supabaseChannel);
@@ -953,6 +1014,8 @@ function Edit() {
           container.removeChild(container.firstChild);
         }
       }
+      
+      console.log('✅ Cleanup complete');
     };
   }, []);
 
