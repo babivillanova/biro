@@ -52,7 +52,7 @@
   min-width: 80px;
 }
 
-#controls-panel {
+#fragment-library-panel {
   position: fixed;
   top: 20px;
   right: 20px;
@@ -76,11 +76,11 @@
 }
 
 @media (max-width: 768px) {
-  #controls-panel {
+  #fragment-library-panel {
     display: none;
   }
 
-  #controls-panel.options-menu-visible {
+  #fragment-library-panel.options-menu-visible {
     display: block;
     top: 50%;
     left: 50%;

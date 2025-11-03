@@ -78,18 +78,28 @@ function IfcImporter() {
 
     // Cleanup function
     return () => {
+      console.log('🧹 Cleaning up IfcImporter component...');
+      
       if (componentsRef.current) {
         componentsRef.current.dispose();
       }
+      
       if (panelRef.current && panelRef.current.parentNode) {
+        console.log('🗑️ Removing IfcImporter panel');
         panelRef.current.parentNode.removeChild(panelRef.current);
       }
+      
       if (buttonRef.current && buttonRef.current.parentNode) {
+        console.log('🗑️ Removing IfcImporter button');
         buttonRef.current.parentNode.removeChild(buttonRef.current);
       }
-      if (statsRef.current && statsRef.current.dom.parentNode) {
+      
+      if (statsRef.current && statsRef.current.dom && statsRef.current.dom.parentNode) {
+        console.log('🗑️ Removing IfcImporter stats');
         statsRef.current.dom.parentNode.removeChild(statsRef.current.dom);
       }
+      
+      console.log('✅ IfcImporter cleanup complete');
     };
   }, []);
 
@@ -280,7 +290,7 @@ function IfcImporter() {
       }
 
       return BUI.html`
-        <bim-panel id="controls-panel" active label="IFC Importer 😀" class="options-menu">
+        <bim-panel id="ifc-importer-panel" active label="IFC Importer 😀" class="options-menu">
           <bim-panel-section label="Controls">
             ${content}
           </bim-panel-section>

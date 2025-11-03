@@ -65,7 +65,7 @@
 }
 
 /* Panel styles */
-#controls-panel {
+#edit-controls-panel {
   position: fixed !important;
   top: 1rem !important;
   right: 1rem !important;
@@ -92,7 +92,7 @@
     display: block;
   }
 
-  #controls-panel {
+  #edit-controls-panel {
     position: fixed;
     top: 0;
     right: -100%;
@@ -102,7 +102,7 @@
     transition: right 0.3s ease;
   }
 
-  #controls-panel.options-menu-visible {
+  #edit-controls-panel.options-menu-visible {
     right: 0;
   }
 }

@@ -74,18 +74,28 @@ function FragmentLibrary() {
 
     // Cleanup function
     return () => {
+      console.log('🧹 Cleaning up FragmentLibrary component...');
+      
       if (componentsRef.current) {
         componentsRef.current.dispose();
       }
+      
       if (panelRef.current && panelRef.current.parentNode) {
+        console.log('🗑️ Removing FragmentLibrary panel');
         panelRef.current.parentNode.removeChild(panelRef.current);
       }
+      
       if (buttonRef.current && buttonRef.current.parentNode) {
+        console.log('🗑️ Removing FragmentLibrary button');
         buttonRef.current.parentNode.removeChild(buttonRef.current);
       }
-      if (statsRef.current && statsRef.current.dom.parentNode) {
+      
+      if (statsRef.current && statsRef.current.dom && statsRef.current.dom.parentNode) {
+        console.log('🗑️ Removing FragmentLibrary stats');
         statsRef.current.dom.parentNode.removeChild(statsRef.current.dom);
       }
+      
+      console.log('✅ FragmentLibrary cleanup complete');
     };
   }, []);
 
@@ -310,7 +320,7 @@ function FragmentLibrary() {
           `;
 
       return BUI.html`
-        <bim-panel id="controls-panel" active label="Fragment Library 📚" class="options-menu">
+        <bim-panel id="fragment-library-panel" active label="Fragment Library 📚" class="options-menu">
           <bim-panel-section label="Saved Fragments">
             ${content}
           </bim-panel-section>

@@ -140,10 +140,28 @@ function Home() {
 
     // Cleanup function
     return () => {
-      components.dispose();
-      if (panel.parentNode) panel.parentNode.removeChild(panel);
-      if (button.parentNode) button.parentNode.removeChild(button);
-      if (stats.dom.parentNode) stats.dom.parentNode.removeChild(stats.dom);
+      console.log('🧹 Cleaning up Home component...');
+      
+      if (components) {
+        components.dispose();
+      }
+      
+      if (panel && panel.parentNode) {
+        console.log('🗑️ Removing Home panel');
+        panel.parentNode.removeChild(panel);
+      }
+      
+      if (button && button.parentNode) {
+        console.log('🗑️ Removing Home button');
+        button.parentNode.removeChild(button);
+      }
+      
+      if (stats && stats.dom && stats.dom.parentNode) {
+        console.log('🗑️ Removing Home stats');
+        stats.dom.parentNode.removeChild(stats.dom);
+      }
+      
+      console.log('✅ Home cleanup complete');
     };
   }, []);
 

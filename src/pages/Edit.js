@@ -9,9 +9,6 @@ import * as FRAGS from "@thatopen/fragments";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { supabase } from '../supabaseClient';
 
-// Track initialization state across component remounts (for React.StrictMode)
-let isSceneInitialized = false;
-
 // GeneralEditor class for editing BIM elements
 class GeneralEditor {
   onUpdated = new OBC.Event();
@@ -450,18 +447,19 @@ class GeneralEditor {
 function Edit() {
   const containerRef = useRef(null);
   const editorRef = useRef(null);
+  const isInitializedRef = useRef(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
     
     // Prevent double initialization from React.StrictMode
-    if (isSceneInitialized) {
+    if (isInitializedRef.current) {
       console.log('⚠️ Skipping initialization - already initialized');
       return;
     }
     
     // Set flag immediately to prevent concurrent initialization attempts
-    isSceneInitialized = true;
+    isInitializedRef.current = true;
 
     const container = containerRef.current;
     let isCleaning = false;
@@ -885,7 +883,7 @@ function Edit() {
         // Create main panel - simplified version
         panel = BUI.Component.create(() => {
           return BUI.html`
-            <bim-panel id="controls-panel" active label="Element Editor" class="options-menu" style="position: fixed; top: 1rem; right: 1rem; z-index: 999; min-width: 20rem; max-width: 30rem;">
+            <bim-panel id="edit-controls-panel" active label="Element Editor" class="options-menu" style="position: fixed; top: 1rem; right: 1rem; z-index: 999; min-width: 20rem; max-width: 30rem;">
               <bim-panel-section label="Controls">
                 <bim-label>Double-click an element to select it for editing</bim-label>
                 <bim-button label="Apply changes" @click=${() => {
@@ -981,8 +979,8 @@ function Edit() {
     // Cleanup function
     return () => {
       // Skip cleanup if never initialized
-      if (!isSceneInitialized) {
-        console.log('⏭️ Skipping cleanup - was never initialized');
+      if (!isInitializedRef.current) {
+        console.log('⏭️ Skipping Edit cleanup - was never initialized');
         return;
       }
       
@@ -1003,10 +1001,75 @@ function Edit() {
         console.log('🔌 Stopped polling');
       }
       
-      if (components) components.dispose();
-      if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
-      if (button && button.parentNode) button.parentNode.removeChild(button);
-      if (stats && stats.dom.parentNode) stats.dom.parentNode.removeChild(stats.dom);
+      // Dispose components
+      if (components) {
+        try {
+          components.dispose();
+          console.log('🗑️ Disposed Edit components');
+        } catch (error) {
+          console.error('Error disposing components:', error);
+        }
+      }
+      
+      // Remove UI elements from DOM with extra verification
+      if (panel) {
+        if (panel.parentNode) {
+          console.log('🗑️ Removing Edit panel from parent');
+          panel.parentNode.removeChild(panel);
+        }
+        if (document.body.contains(panel)) {
+          console.log('🗑️ Removing Edit panel still in body');
+          document.body.removeChild(panel);
+        }
+      }
+      
+      if (button) {
+        if (button.parentNode) {
+          console.log('🗑️ Removing Edit button from parent');
+          button.parentNode.removeChild(button);
+        }
+        if (document.body.contains(button)) {
+          console.log('🗑️ Removing Edit button still in body');
+          document.body.removeChild(button);
+        }
+      }
+      
+      if (stats && stats.dom) {
+        if (stats.dom.parentNode) {
+          console.log('🗑️ Removing Edit stats from parent');
+          stats.dom.parentNode.removeChild(stats.dom);
+        }
+        if (document.body.contains(stats.dom)) {
+          console.log('🗑️ Removing Edit stats still in body');
+          document.body.removeChild(stats.dom);
+        }
+      }
+      
+      // AGGRESSIVE CLEANUP: Query and remove any lingering Edit panels by ID/label
+      console.log('🔍 Searching for lingering Edit UI elements...');
+      
+      // Find and remove the Edit panel by ID
+      const editPanel = document.getElementById('edit-controls-panel');
+      if (editPanel) {
+        console.log('🗑️ Found and removing Edit panel by ID');
+        editPanel.remove();
+      }
+      
+      // Find and remove all bim-panel elements with Edit-specific label
+      const allPanels = document.querySelectorAll('bim-panel[label="Element Editor"]');
+      allPanels.forEach((p, index) => {
+        console.log(`🗑️ Removing Edit panel ${index + 1} by label`);
+        p.remove();
+      });
+      
+      // Find and remove all phone menu togglers
+      const allTogglers = document.querySelectorAll('.phone-menu-toggler');
+      allTogglers.forEach((t, index) => {
+        console.log(`🗑️ Removing phone toggler ${index + 1}`);
+        t.remove();
+      });
+      
+      console.log('✅ Aggressive DOM cleanup complete');
       
       // Clear the container to remove any canvas elements
       if (container) {
@@ -1015,7 +1078,15 @@ function Edit() {
         }
       }
       
-      console.log('✅ Cleanup complete');
+      // Reset the initialization flag so the page can be reloaded
+      isInitializedRef.current = false;
+      
+      // Clean up global references
+      if (window.generalEditorRef) {
+        delete window.generalEditorRef;
+      }
+      
+      console.log('✅ Edit cleanup complete, flag reset');
     };
   }, []);
 
