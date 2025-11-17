@@ -62,6 +62,16 @@
   z-index: 100;
 }
 
+#postproduction-panel {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  max-width: 350px;
+  max-height: 70vh;
+  overflow-y: auto;
+  z-index: 100;
+}
+
 .phone-menu-toggler {
   position: fixed;
   bottom: 20px;
@@ -87,6 +97,13 @@
     transform: translate(-50%, -50%);
     max-width: 90%;
     max-height: 80vh;
+  }
+
+  #postproduction-panel {
+    bottom: 70px;
+    left: 10px;
+    max-width: calc(100% - 80px);
+    max-height: 50vh;
   }
   
   .fragment-actions {

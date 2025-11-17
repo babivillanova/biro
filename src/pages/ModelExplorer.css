@@ -1,0 +1,255 @@
+.ModelExplorer {
+  width: 100%;
+  height: 100vh;
+  position: relative;
+  display: flex;
+  flex-direction: row;
+}
+
+#container {
+  width: calc(100vw - 450px);
+  height: 100vh;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+#container canvas {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Panel styles */
+.options-menu {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  width: 320px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  z-index: 100;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Phone menu toggler */
+.phone-menu-toggler {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 101;
+  display: none;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .options-menu {
+    transform: translateX(-110%);
+    transition: transform 0.3s ease;
+  }
+
+  .options-menu-visible {
+    transform: translateX(0);
+  }
+
+  .phone-menu-toggler {
+    display: block;
+  }
+}
+
+/* Scrollbar styles */
+.options-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.options-menu::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 8px;
+}
+
+.options-menu::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 8px;
+}
+
+.options-menu::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Log Display Styles */
+.log-display {
+  width: 450px;
+  height: 100vh;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-left: 2px solid #3a3a3a;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: #2a2a2a;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.log-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.clear-logs-btn {
+  background: #d32f2f;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.clear-logs-btn:hover {
+  background: #b71c1c;
+}
+
+.log-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 20px;
+}
+
+.no-logs {
+  text-align: center;
+  color: #808080;
+  padding: 40px 20px;
+  font-style: italic;
+}
+
+.log-entry {
+  background: #252526;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.log-entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #2d2d30;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.log-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #4fc3f7;
+}
+
+.log-timestamp {
+  font-size: 12px;
+  color: #808080;
+  font-family: 'Courier New', monospace;
+}
+
+.log-data {
+  margin: 0;
+  padding: 14px;
+  font-family: 'Courier New', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #d4d4d4;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: #1e1e1e;
+}
+
+/* Scrollbar for log content */
+.log-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.log-content::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.log-content::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 5px;
+}
+
+.log-content::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+}
+
+.log-data::-webkit-scrollbar {
+  height: 8px;
+}
+
+.log-data::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+.log-data::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 4px;
+}
+
+.log-data::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+  .ModelExplorer {
+    flex-direction: column;
+  }
+
+  #container {
+    width: 100%;
+    height: calc(100vh - 250px);
+  }
+
+  .log-display {
+    width: 100%;
+    height: 250px;
+    border-left: none;
+    border-top: 2px solid #3a3a3a;
+  }
+
+  .log-header {
+    padding: 8px 12px;
+  }
+
+  .log-header h3 {
+    font-size: 14px;
+  }
+
+  .log-content {
+    padding: 8px 12px;
+  }
+
+  .log-data {
+    font-size: 11px;
+    padding: 10px;
+  }
+}
+

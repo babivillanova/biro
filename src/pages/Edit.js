@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import '../App.css';
 import './Edit.css';
 import * as THREE from "three";
@@ -8,6 +9,45 @@ import * as OBC from "@thatopen/components";
 import * as FRAGS from "@thatopen/fragments";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { supabase } from '../supabaseClient';
+
+// Helper function to fix profiles/bigProfiles objects to be iterable
+function fixRequestProfiles(request) {
+  if (request.data && request.data.geometry) {
+    // Fix profiles
+    if (request.data.geometry.profiles) {
+      const profiles = request.data.geometry.profiles;
+      if (typeof profiles === 'object' && !Array.isArray(profiles) && !(profiles instanceof Map)) {
+        console.log('🔧 Converting profiles object to Map for request type:', request.type);
+        request.data.geometry.profiles = new Map(Object.entries(profiles));
+      }
+    }
+    // Fix bigProfiles
+    if (request.data.geometry.bigProfiles) {
+      const bigProfiles = request.data.geometry.bigProfiles;
+      if (typeof bigProfiles === 'object' && !Array.isArray(bigProfiles) && !(bigProfiles instanceof Map)) {
+        console.log('🔧 Converting bigProfiles object to Map');
+        request.data.geometry.bigProfiles = new Map(Object.entries(bigProfiles));
+      }
+    }
+    // Fix holes
+    if (request.data.geometry.holes) {
+      const holes = request.data.geometry.holes;
+      if (typeof holes === 'object' && !Array.isArray(holes) && !(holes instanceof Map)) {
+        console.log('🔧 Converting holes object to Map');
+        request.data.geometry.holes = new Map(Object.entries(holes));
+      }
+    }
+    // Fix bigHoles
+    if (request.data.geometry.bigHoles) {
+      const bigHoles = request.data.geometry.bigHoles;
+      if (typeof bigHoles === 'object' && !Array.isArray(bigHoles) && !(bigHoles instanceof Map)) {
+        console.log('🔧 Converting bigHoles object to Map');
+        request.data.geometry.bigHoles = new Map(Object.entries(bigHoles));
+      }
+    }
+  }
+  return request;
+}
 
 // GeneralEditor class for editing BIM elements
 class GeneralEditor {
@@ -86,11 +126,52 @@ class GeneralEditor {
   }
 
   async init() {
-    this._materials = await this._model.getMaterials();
-    const allLtIds = await this._model.getLocalTransformsIds();
-    const allGeomsIds = await this._model.getRepresentationsIds();
-    this._localTransformsIds = [allLtIds[0], allLtIds[1]];
-    this._geometriesIds = [allGeomsIds[0], allGeomsIds[1]];
+    console.log('🔧 Initializing editor...');
+    
+    // Check if model has the required methods for advanced editing
+    const hasMaterials = typeof this._model.getMaterials === 'function';
+    const hasLocalTransforms = typeof this._model.getLocalTransformsIds === 'function';
+    const hasRepresentations = typeof this._model.getRepresentationsIds === 'function';
+    
+    console.log('📋 Model capabilities:', {
+      hasMaterials,
+      hasLocalTransforms,
+      hasRepresentations
+    });
+    
+    // Set defaults first
+    this._materials = new Map();
+    this._localTransformsIds = [];
+    this._geometriesIds = [];
+    
+    try {
+      if (hasMaterials) {
+        this._materials = await this._model.getMaterials();
+        console.log('✅ Materials loaded:', this._materials.size);
+      }
+      
+      if (hasLocalTransforms) {
+        const allLtIds = await this._model.getLocalTransformsIds();
+        if (allLtIds && allLtIds.length > 0) {
+          this._localTransformsIds = [allLtIds[0], allLtIds[1]];
+          console.log('✅ Local transforms loaded');
+        }
+      }
+      
+      if (hasRepresentations) {
+        const allGeomsIds = await this._model.getRepresentationsIds();
+        if (allGeomsIds && allGeomsIds.length > 0) {
+          this._geometriesIds = [allGeomsIds[0], allGeomsIds[1]];
+          console.log('✅ Representations loaded');
+        }
+      }
+      
+      console.log('✅ Editor initialized successfully');
+    } catch (error) {
+      console.error('⚠️ Editor initialization error:', error);
+      console.log('💡 This model has limited editing capabilities');
+      console.log('💡 Basic transformations should still work');
+    }
   }
 
   setUserIp(ip) {
@@ -205,6 +286,18 @@ class GeneralEditor {
     // Apply changes to Fragments
     const requests = this._element.getRequests();
     if (requests) {
+      console.log('📝 Generated edit requests:', requests);
+      
+      // Fix profiles/holes objects to be iterable (Map instead of plain object)
+      requests.forEach((req, idx) => {
+        console.log(`Request ${idx}:`, {
+          type: req.type,
+          localId: req.localId,
+          data: req.data
+        });
+        fixRequestProfiles(req);
+      });
+      
       await this._fragments.editor.edit(this._model.modelId, requests);
       
       // Save to Supabase for multi-user sync
@@ -388,11 +481,19 @@ class GeneralEditor {
       }
 
       // Get the selected element
-      const [element] = await this._fragments.editor.getElements(this._model.modelId, [
-        result.localId,
-      ]);
-      this._element = element;
-      if (!element) {
+      try {
+        const [element] = await this._fragments.editor.getElements(this._model.modelId, [
+          result.localId,
+        ]);
+        this._element = element;
+        if (!element) {
+          console.log('⚠️ Could not get element for editing');
+          return;
+        }
+      } catch (error) {
+        console.error('⚠️ Error getting element:', error);
+        console.log('💡 This model may not support element-level editing');
+        alert('This model does not support advanced editing.\n\nThe fragment may need to be re-imported with full IFC data.');
         return;
       }
 
@@ -405,7 +506,7 @@ class GeneralEditor {
       await this.setVisible(false);
 
       // Add the selected meshes to the scene
-      this._mesh = await element.getMeshes();
+      this._mesh = await this._element.getMeshes();
       this._world.scene.three.add(this._mesh);
       await this.createControls();
 
@@ -445,6 +546,7 @@ class GeneralEditor {
 }
 
 function Edit() {
+  const { fragmentId } = useParams();
   const containerRef = useRef(null);
   const editorRef = useRef(null);
   const isInitializedRef = useRef(false);
@@ -582,20 +684,87 @@ function Edit() {
           });
         });
 
-        // Load model
-        const fetched = await fetch("https://thatopen.github.io/engine_fragment/resources/frags/school_arq.frag");
-        const buffer = await fetched.arrayBuffer();
-        model = await fragments.load(buffer, {
-          modelId: "medium_test",
-          camera: world.camera.three,
-        });
+        // Load model - either from Supabase fragment or example model
+        let buffer;
+        let modelId;
+        
+        if (fragmentId) {
+          // Load from Supabase
+          console.log('🔍 Loading fragment from Supabase:', fragmentId);
+          
+          const { data: fragment, error } = await supabase
+            .from('ifc_fragments')
+            .select('*')
+            .eq('id', fragmentId)
+            .single();
+          
+          if (error) {
+            console.error('❌ Error loading fragment from Supabase:', error);
+            alert('Error loading model from database: ' + error.message);
+            return;
+          }
+          
+          if (!fragment) {
+            alert('Fragment not found in database');
+            return;
+          }
+          
+          console.log('✅ Fragment loaded from database:', {
+            name: fragment.name,
+            size: fragment.file_size,
+            id: fragment.id
+          });
+          
+          // Decode Base64 back to ArrayBuffer
+          console.log('🔄 Decoding fragment data...');
+          const binaryString = atob(fragment.fragment_data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          buffer = bytes.buffer;
+          modelId = fragment.id; // Use fragment ID as model ID
+          console.log('✅ Fragment decoded, buffer size:', buffer.byteLength);
+        } else {
+          // Load example model
+          console.log('📥 Loading example model from URL...');
+          const fetched = await fetch("https://thatopen.github.io/engine_fragment/resources/frags/school_arq.frag");
+          buffer = await fetched.arrayBuffer();
+          modelId = "medium_test";
+        }
+        
+        console.log('🔄 Loading fragment into scene...');
+        try {
+          model = await fragments.load(buffer, {
+            modelId: modelId,
+            camera: world.camera.three,
+          });
 
-        world.scene.three.add(model.object);
-        await fragments.update(true);
+          world.scene.three.add(model.object);
+          await fragments.update(true);
+
+          console.log('📋 Model loaded successfully:', {
+            modelId: model.modelId,
+            hasEditor: !!model.editor,
+            hasTiles: !!model.tiles,
+            tileCount: model.tiles?.list?.size || 0
+          });
+        } catch (error) {
+          console.error('❌ Error loading model into scene:', error);
+          alert('Error loading model: ' + error.message + '\n\nThe fragment file might be corrupted or incompatible.');
+          return;
+        }
 
         // Setup editor
         generalEditor = new GeneralEditor(world, model, fragments);
-        await generalEditor.init();
+        try {
+          await generalEditor.init();
+          console.log('✅ Editor ready for model:', model.modelId);
+        } catch (error) {
+          console.error('⚠️ Editor initialization warning:', error);
+          console.log('💡 Continuing with limited editor capabilities');
+          // Continue anyway - editing should still work with the profiles fix
+        }
         generalEditor.setUserIp(userIp); // Set the user's IP for tracking
         editorRef.current = generalEditor;
 
@@ -672,6 +841,7 @@ function Edit() {
                 requestButton.classList.add("selected-request");
                 
                 // Apply this specific edit from database
+                fixRequestProfiles(request); // Fix profiles before applying
                 await fragments.editor.edit(model.modelId, [request]);
                 await model.setVisible(undefined, true);
                 selectedRequestIndex = currentIndex;
@@ -722,10 +892,18 @@ function Edit() {
         
         let lastCheckTime = new Date().toISOString();
         let isRealtimeWorking = false;
+        let retryCount = 0;
+        const MAX_RETRIES = 5;
+        let currentChannel = null;
         
         // Polling fallback: check for new edits every 3 seconds
         const startPolling = () => {
-          console.log('🔄 Real-time failed, using polling instead (checks every 3s)');
+          if (pollingInterval) {
+            console.log('⚠️ Polling already active, skipping duplicate start');
+            return;
+          }
+          
+          console.log('🔄 Real-time failed after retries, using polling instead (checks every 3s)');
           pollingInterval = setInterval(async () => {
             try {
               const { data: newEdits, error } = await supabase
@@ -744,7 +922,11 @@ function Edit() {
                 console.log(`🆕 Found ${newEdits.length} new edits via polling`);
                 
                 // Apply new edits to the model
-                const newRequests = newEdits.map(edit => edit.request_data);
+                const newRequests = newEdits.map(edit => {
+                  const req = edit.request_data;
+                  fixRequestProfiles(req); // Fix profiles before applying
+                  return req;
+                });
                 await fragments.editor.edit(model.modelId, newRequests);
                 await fragments.update(true);
                 
@@ -760,73 +942,112 @@ function Edit() {
           }, 3000); // Check every 3 seconds
         };
         
-        const realtimeChannel = supabase
-          .channel('edit-requests-changes')
-          .on(
-            'postgres_changes',
-            {
-              event: '*', // Listen to INSERT, UPDATE, DELETE
-              schema: 'public',
-              table: 'edit_requests',
-              filter: `model_id=eq.${model.modelId}`
-            },
-            async (payload) => {
-              console.log('⚡ Real-time update received!', {
-                eventType: payload.eventType,
-                timestamp: new Date().toLocaleTimeString()
-              });
-              console.log('📦 Payload:', payload);
-              
-              isRealtimeWorking = true;
-              
-              // When another user makes an edit, update the view
-              if (payload.eventType === 'INSERT') {
-                console.log('🆕 New edit detected, applying to local view...');
-                const newRequest = payload.new.request_data;
+        // Function to setup realtime channel
+        const setupRealtimeChannel = () => {
+          const channel = supabase
+            .channel(`edit-requests-changes-${Date.now()}`) // Unique channel name for each retry
+            .on(
+              'postgres_changes',
+              {
+                event: '*', // Listen to INSERT, UPDATE, DELETE
+                schema: 'public',
+                table: 'edit_requests',
+                filter: `model_id=eq.${model.modelId}`
+              },
+              async (payload) => {
+                console.log('⚡ Real-time update received!', {
+                  eventType: payload.eventType,
+                  timestamp: new Date().toLocaleTimeString()
+                });
+                console.log('📦 Payload:', payload);
                 
-                // Apply the new request to the local fragments
-                await fragments.editor.edit(model.modelId, [newRequest]);
-                await fragments.update(true);
-                console.log('✅ Local view updated with remote changes');
+                isRealtimeWorking = true;
+                retryCount = 0; // Reset retry count on successful message
                 
-                // Update last check time
-                lastCheckTime = payload.new.created_at;
+                // When another user makes an edit, update the view
+                if (payload.eventType === 'INSERT') {
+                  console.log('🆕 New edit detected, applying to local view...');
+                  const newRequest = payload.new.request_data;
+                  fixRequestProfiles(newRequest); // Fix profiles before applying
+                  
+                  // Apply the new request to the local fragments
+                  await fragments.editor.edit(model.modelId, [newRequest]);
+                  await fragments.update(true);
+                  console.log('✅ Local view updated with remote changes');
+                  
+                  // Update last check time
+                  lastCheckTime = payload.new.created_at;
+                }
+                
+                // Refresh the history menu
+                await updateHistoryMenu();
+              }
+            )
+            .subscribe((status, err) => {
+              console.log('📡 Real-time subscription status:', status);
+              if (err) {
+                console.error('📦 Error details:', err);
               }
               
-              // Refresh the history menu
-              await updateHistoryMenu();
-            }
-          )
-          .subscribe((status, err) => {
-            console.log('📡 Real-time subscription status:', status);
-            if (err) {
-              console.error('📦 Error details:', err);
-            }
-            
-            if (status === 'SUBSCRIBED') {
-              console.log('✅ Successfully subscribed to real-time updates!');
-              console.log('👥 You will now see changes from other users instantly');
-              isRealtimeWorking = true;
-            } else if (status === 'CHANNEL_ERROR') {
-              console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-              console.warn('⚠️ Real-time subscription failed');
-              console.warn('🔄 Falling back to polling mode (checks every 3s)');
-              console.warn('💡 This still works, but see REALTIME_FIX.md to enable true real-time');
-              console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-              
-              // Start polling as fallback
-              startPolling();
-            } else if (status === 'TIMED_OUT') {
-              console.error('⏱️ Real-time subscription timed out');
-              console.log('🔄 Starting polling mode...');
-              startPolling();
-            } else if (status === 'CLOSED') {
-              console.log('🔌 Real-time subscription closed');
-              if (!isRealtimeWorking && !pollingInterval) {
-                startPolling();
+              if (status === 'SUBSCRIBED') {
+                console.log('✅ Successfully subscribed to real-time updates!');
+                console.log('👥 You will now see changes from other users instantly');
+                isRealtimeWorking = true;
+                retryCount = 0; // Reset retry count on successful subscription
+              } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                const statusMessage = {
+                  'CHANNEL_ERROR': '⚠️ Real-time subscription channel error',
+                  'TIMED_OUT': '⏱️ Real-time subscription timed out',
+                  'CLOSED': '🔌 Real-time subscription closed'
+                };
+                
+                console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                console.warn(statusMessage[status] || '⚠️ Real-time subscription failed');
+                
+                // Only retry if we haven't reached max retries and realtime hasn't worked yet
+                if (retryCount < MAX_RETRIES && !isRealtimeWorking) {
+                  retryCount++;
+                  const delay = Math.pow(2, retryCount - 1) * 1000; // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+                  
+                  console.warn(`🔄 Retry attempt ${retryCount}/${MAX_RETRIES} in ${delay/1000} seconds...`);
+                  console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                  
+                  // Clean up current channel before retrying
+                  if (currentChannel) {
+                    supabase.removeChannel(currentChannel);
+                  }
+                  
+                  // Retry after delay
+                  setTimeout(() => {
+                    console.log(`🔄 Attempting to reconnect (${retryCount}/${MAX_RETRIES})...`);
+                    currentChannel = setupRealtimeChannel();
+                  }, delay);
+                } else if (retryCount >= MAX_RETRIES) {
+                  console.warn('❌ Max retry attempts reached');
+                  console.warn('🔄 Falling back to polling mode (checks every 3s)');
+                  console.warn('💡 This still works, but see REALTIME_FIX.md to enable true real-time');
+                  console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                  
+                  // Start polling as final fallback
+                  if (!pollingInterval) {
+                    startPolling();
+                  }
+                } else if (isRealtimeWorking && status === 'CLOSED') {
+                  // If realtime was working and connection closed, try to reconnect once
+                  console.log('🔄 Reconnecting after unexpected close...');
+                  if (currentChannel) {
+                    supabase.removeChannel(currentChannel);
+                  }
+                  currentChannel = setupRealtimeChannel();
+                }
               }
-            }
-          });
+            });
+          
+          return channel;
+        };
+        
+        // Initialize the first connection attempt
+        currentChannel = setupRealtimeChannel();
 
         // Load and apply all existing edits from database
         const loadAndApplyEdits = async () => {
@@ -848,7 +1069,11 @@ function Edit() {
               console.log(`📥 Found ${dbRequests.length} existing edits, applying to model...`);
               
               // Extract all request_data and apply them in order
-              const allRequests = dbRequests.map(dbReq => dbReq.request_data);
+              const allRequests = dbRequests.map(dbReq => {
+                const req = dbReq.request_data;
+                fixRequestProfiles(req); // Fix profiles before applying
+                return req;
+              });
               await fragments.editor.edit(model.modelId, allRequests);
               await fragments.update(true);
               
@@ -869,7 +1094,7 @@ function Edit() {
         fragments.editor.onEdit.add(updateHistoryMenu);
 
         // Store channel reference for cleanup
-        window.supabaseChannel = realtimeChannel;
+        window.supabaseChannel = currentChannel;
         
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('🎉 Supabase integration ready!');

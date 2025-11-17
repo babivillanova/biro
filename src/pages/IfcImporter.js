@@ -23,6 +23,8 @@ function IfcImporter() {
   const [loadingMessage, setLoadingMessage] = useState('');
   const [modelName, setModelName] = useState('');
   const [currentModelId, setCurrentModelId] = useState(null);
+  const [useAlternativeMethod, setUseAlternativeMethod] = useState(false);
+  const ifcLoaderRef = useRef(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -53,10 +55,25 @@ function IfcImporter() {
     const grids = components.get(OBC.Grids);
     grids.create(world);
 
-    // Initialize IFC Serializer
+    // Initialize IFC Serializer (Method 1: Basic fragments)
     const serializer = new FRAGS.IfcImporter();
     serializer.wasm = { absolute: true, path: "https://unpkg.com/web-ifc@0.0.72/" };
     serializerRef.current = serializer;
+
+    // Initialize IFC Loader (Method 2: Full IFC data - experimental)
+    const initIfcLoader = async () => {
+      try {
+        const ifcLoader = components.get(OBC.IfcLoader);
+        await ifcLoader.setup();
+        ifcLoader.settings.webIfc.COORDINATE_TO_ORIGIN = true;
+        ifcLoader.settings.webIfc.OPTIMIZE_PROFILES = true;
+        ifcLoaderRef.current = ifcLoader;
+        console.log('✅ IfcLoader initialized (alternative method available)');
+      } catch (error) {
+        console.log('⚠️ IfcLoader not available:', error.message);
+      }
+    };
+    initIfcLoader();
 
     // Initialize Fragments Manager
     const workerUrl = `${window.location.origin}/worker.mjs`;
@@ -103,32 +120,93 @@ function IfcImporter() {
     };
   }, []);
 
-  const convertIFC = async (file) => {
+  const convertIFC = async (file, isUrl = false) => {
     try {
       setIsLoading(true);
       setLoadingMessage('Converting IFC to Fragments...');
       
-      const arrayBuffer = await file.arrayBuffer();
+      let arrayBuffer;
+      let fileName;
+      
+      if (isUrl) {
+        console.log('📥 Fetching IFC from URL:', file);
+        const response = await fetch(file);
+        arrayBuffer = await response.arrayBuffer();
+        fileName = file.split('/').pop().replace('.ifc', '');
+      } else {
+        arrayBuffer = await file.arrayBuffer();
+        fileName = file.name.replace('.ifc', '');
+      }
+      
       const ifcBytes = new Uint8Array(arrayBuffer);
       
-      const fragmentData = await serializerRef.current.process({
-        bytes: ifcBytes,
-        progressCallback: (progress, data) => {
-          console.log(`Conversion progress: ${progress}%`, data);
-          setLoadingMessage(`Converting IFC to Fragments... ${Math.round(progress)}%`);
-        },
-      });
-
-      setFragmentBytes(fragmentData);
-      setModelName(file.name.replace('.ifc', ''));
+      console.log('📊 IFC file size:', (arrayBuffer.byteLength / 1024 / 1024).toFixed(2), 'MB');
       
-      console.log('✅ IFC conversion completed');
+      if (useAlternativeMethod && ifcLoaderRef.current) {
+        console.log('🔧 Using IfcLoader (Method 2: Full IFC data preservation)');
+        setLoadingMessage('Converting with IfcLoader (preserving IFC metadata)...');
+        
+        try {
+          // Load IFC with IfcLoader (preserves more metadata)
+          const model = await ifcLoaderRef.current.load(ifcBytes);
+          
+          // Export to fragments
+          const fragmentsManager = componentsRef.current.get(OBC.FragmentsManager);
+          const fragmentData = await fragmentsManager.export(model);
+          
+          console.log('📦 Fragment data generated with IfcLoader:', {
+            size: (fragmentData.byteLength / 1024 / 1024).toFixed(2) + ' MB',
+            hasMetadata: true
+          });
+          
+          setFragmentBytes(fragmentData);
+          setModelName(fileName + '_full');
+          
+          console.log('✅ IFC conversion completed with FULL metadata');
+          console.log('💡 This fragment should support editing features');
+        } catch (loaderError) {
+          console.error('❌ IfcLoader method failed:', loaderError);
+          console.log('⚠️ Falling back to IfcImporter method...');
+          setUseAlternativeMethod(false);
+          throw loaderError;
+        }
+      } else {
+        console.log('🔧 Using IfcImporter (Method 1: Basic fragments)');
+        setLoadingMessage('Converting IFC to Fragments...');
+        
+        const fragmentData = await serializerRef.current.process({
+          bytes: ifcBytes,
+          progressCallback: (progress, data) => {
+            console.log(`Conversion progress: ${progress}%`, data);
+            setLoadingMessage(`Converting IFC to Fragments... ${Math.round(progress)}%`);
+          },
+        });
+
+        console.log('📦 Fragment data generated:', {
+          size: (fragmentData.byteLength / 1024 / 1024).toFixed(2) + ' MB',
+          type: fragmentData.constructor.name
+        });
+
+        setFragmentBytes(fragmentData);
+        setModelName(fileName);
+        
+        console.log('✅ IFC conversion completed');
+        console.log('⚠️ NOTE: Fragments created with IfcImporter contain geometry only.');
+        console.log('💡 For full editing capabilities, IFC metadata (profiles, transforms) must be preserved.');
+        console.log('📖 See FRAGMENT_EDITING_LIMITATIONS.md for details.');
+      }
+      
       setIsLoading(false);
     } catch (error) {
       console.error('Error converting IFC:', error);
       alert('Error converting IFC file: ' + error.message);
       setIsLoading(false);
     }
+  };
+
+  const testTutorialSample = async () => {
+    const tutorialUrl = "https://thatopen.github.io/engine_fragment/resources/ifc/school_str.ifc";
+    await convertIFC(tutorialUrl, true);
   };
 
   const handleFileUpload = (event) => {
@@ -254,6 +332,39 @@ function IfcImporter() {
           <bim-label style="white-space: normal; font-size: 12px; color: #666;">
             Open the browser console to see detailed conversion progress
           </bim-label>
+          
+          <bim-label style="white-space: normal; font-size: 11px; color: #ff9800; margin-top: 10px;">
+            ⚠️ Note: IfcImporter creates basic fragments (geometry only). For editing support, try the alternative method below.
+          </bim-label>
+          
+          <div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 4px;">
+            <bim-label style="white-space: normal; font-size: 12px; font-weight: bold;">Conversion Method:</bim-label>
+            <div style="margin-top: 5px;">
+              <label style="display: flex; align-items: center; cursor: pointer;">
+                <input 
+                  type="radio" 
+                  name="method" 
+                  value="basic"
+                  checked=${!useAlternativeMethod}
+                  @change=${() => setUseAlternativeMethod(false)}
+                  style="margin-right: 8px;"
+                />
+                <span style="font-size: 12px;">Method 1: IfcImporter (Tutorial method - basic fragments)</span>
+              </label>
+              <label style="display: flex; align-items: center; cursor: pointer; margin-top: 5px;">
+                <input 
+                  type="radio" 
+                  name="method" 
+                  value="full"
+                  checked=${useAlternativeMethod}
+                  @change=${() => setUseAlternativeMethod(true)}
+                  style="margin-right: 8px;"
+                />
+                <span style="font-size: 12px;">Method 2: IfcLoader (Experimental - preserves metadata)</span>
+              </label>
+            </div>
+          </div>
+          
           <div class="file-upload-container">
             <input 
               type="file" 
@@ -265,6 +376,11 @@ function IfcImporter() {
             <bim-button 
               label="Select IFC File" 
               @click=${() => document.getElementById('ifc-file-input').click()}
+            ></bim-button>
+            <bim-button 
+              label="Test Tutorial Sample" 
+              @click=${testTutorialSample}
+              style="margin-top: 10px;"
             ></bim-button>
           </div>
         `;
@@ -322,7 +438,7 @@ function IfcImporter() {
       document.body.append(button);
       buttonRef.current = button;
     }
-  }, [fragmentBytes, currentModelId, modelName]);
+  }, [fragmentBytes, currentModelId, modelName, useAlternativeMethod]);
 
   return (
     <div className="IfcImporter">
