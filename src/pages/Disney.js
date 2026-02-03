@@ -4,6 +4,7 @@ import './Disney.css';
 import * as FRAGS from '@thatopen/fragments';
 import * as OBC from '@thatopen/components';
 import * as THREE from 'three';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls';
 import LoadingSpinner from '../common/loadingSpinner';
 
 const EPCOT_COORDS = {
@@ -37,12 +38,15 @@ function Disney() {
   const viewerReadyRef = useRef(false);
   const geoObjectsRef = useRef([]);
   const fragmentInstancesRef = useRef(new Map());
+  const transformControlsRef = useRef(null);
+  const mapPlaneRef = useRef(null);
 
   const [models, setModels] = useState([]);
   const [locations, setLocations] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [activeLocationId, setActiveLocationId] = useState(null);
+  const [mapOffset, setMapOffset] = useState({ x: 0, y: 0, z: 0 });
 
   // Simple helper to convert lat/lng (degrees) to local X/Z coordinates (meters)
   const geoToLocal = (lat, lng) => {
@@ -95,6 +99,96 @@ function Disney() {
     viewerFragmentsRef.current = fragments;
 
     world.camera.controls.addEventListener('rest', () => fragments.update(true));
+
+    // Setup TransformControls for interactive fragment manipulation
+    const transformControls = new TransformControls(world.camera.three, world.renderer.three.domElement);
+    transformControls.addEventListener('dragging-changed', (event) => {
+      world.camera.controls.enabled = !event.value;
+    });
+    world.scene.three.add(transformControls);
+    transformControlsRef.current = transformControls;
+
+    // Handle double-click to attach transform controls to a fragment
+    const handleDoubleClick = (event) => {
+      // Guard: ensure world and camera are ready
+      if (!viewerReadyRef.current || !world || !world.camera || !world.camera.three) {
+        console.warn('[Disney] World not ready for raycasting');
+        return;
+      }
+
+      const mouse = new THREE.Vector2();
+      const rect = container.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, world.camera.three);
+
+      // Raycast against all fragment parent groups
+      const groups = [];
+      fragmentInstancesRef.current.forEach((modelId, locId) => {
+        const group = world.scene.three.getObjectByName(`disney_group_${locId}`);
+        if (group) groups.push(group);
+      });
+
+      if (groups.length === 0) {
+        // No fragments loaded yet
+        return;
+      }
+
+      try {
+        const intersects = raycaster.intersectObjects(groups, true);
+        if (intersects.length > 0) {
+          // Find the parent group
+          let targetGroup = intersects[0].object;
+          while (targetGroup.parent && !targetGroup.name.startsWith('disney_group_')) {
+            targetGroup = targetGroup.parent;
+          }
+          
+          if (targetGroup && targetGroup.name.startsWith('disney_group_')) {
+            transformControls.attach(targetGroup);
+            console.log('[Disney] Transform controls attached to', targetGroup.name);
+          }
+        } else {
+          transformControls.detach();
+        }
+      } catch (error) {
+        console.error('[Disney] Error during raycasting', error);
+      }
+    };
+
+    container.addEventListener('dblclick', handleDoubleClick);
+
+    // Update location data when transform controls change
+    transformControls.addEventListener('objectChange', () => {
+      const attached = transformControls.object;
+      if (attached && attached.name.startsWith('disney_group_')) {
+        const locId = attached.name.replace('disney_group_', '');
+        const loc = locations.find((l) => l.id === locId);
+        if (loc) {
+          // Convert world position back to lat/lng (inverse of geoToLocal)
+          const x = attached.position.x;
+          const z = attached.position.z;
+          const elevation = attached.position.y;
+          const rotation = THREE.MathUtils.radToDeg(attached.rotation.y);
+
+          const latRad = (EPCOT_COORDS.lat * Math.PI) / 180;
+          const metersPerDegLat = 111132;
+          const metersPerDegLon = 111320 * Math.cos(latRad);
+
+          const lat = EPCOT_COORDS.lat + z / metersPerDegLat;
+          const lng = EPCOT_COORDS.lng + x / metersPerDegLon;
+
+          setLocations((prev) =>
+            prev.map((item) =>
+              item.id === locId
+                ? { ...item, lat, lng, elevation, rotation }
+                : item
+            )
+          );
+        }
+      }
+    });
 
     viewerReadyRef.current = true;
 
@@ -180,8 +274,10 @@ function Disney() {
     const plane = new THREE.Mesh(planeGeometry, planeMaterial);
     plane.rotation.x = -Math.PI / 2;
     plane.position.y = 0;
+    plane.name = 'disney_map_plane';
     world.scene.three.add(plane);
     geoObjectsRef.current.push(plane);
+    mapPlaneRef.current = plane;
     
     // Load tiles from OpenStreetMap
     for (let dx = -1; dx <= 1; dx += 1) {
@@ -336,6 +432,14 @@ function Disney() {
       console.error('Error saving Disney locations to localStorage:', error);
     }
   }, [locations]);
+
+  // Apply map offset when it changes
+  useEffect(() => {
+    if (mapPlaneRef.current) {
+      mapPlaneRef.current.position.set(mapOffset.x, mapOffset.y, mapOffset.z);
+      console.log('[Disney] Map offset applied', mapOffset);
+    }
+  }, [mapOffset]);
 
   // Load/update fragment instances in the main 3D viewer based on locations
   useEffect(() => {
@@ -695,6 +799,53 @@ function Disney() {
                 ))
               )}
             </div>
+          </section>
+
+          <section className="disney-section">
+            <h2 className="disney-section-title">Map Alignment</h2>
+            <p className="disney-section-help">
+              Manually adjust the map position to align it with your fragments.
+            </p>
+            <div className="disney-location-grid">
+              <label className="disney-field-label">
+                Offset X (m)
+                <input
+                  type="number"
+                  step="1"
+                  className="disney-input"
+                  value={mapOffset.x}
+                  onChange={(event) =>
+                    setMapOffset((prev) => ({
+                      ...prev,
+                      x: parseFloat(event.target.value) || 0,
+                    }))
+                  }
+                />
+              </label>
+              <label className="disney-field-label">
+                Offset Z (m)
+                <input
+                  type="number"
+                  step="1"
+                  className="disney-input"
+                  value={mapOffset.z}
+                  onChange={(event) =>
+                    setMapOffset((prev) => ({
+                      ...prev,
+                      z: parseFloat(event.target.value) || 0,
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              className="disney-location-focus"
+              style={{ marginTop: '0.5rem', width: '100%' }}
+              onClick={() => setMapOffset({ x: 0, y: 0, z: 0 })}
+            >
+              Reset Map Position
+            </button>
           </section>
 
           <section className="disney-section disney-locations">
